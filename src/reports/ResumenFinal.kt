@@ -40,7 +40,7 @@ fun mostrarPedidosCombinados(pedidosDelDia: Array<Pedido>) {
 
     println("Pedido N°${primero.id}: ${primero.productos.size} productos, total ${formatearPesos(primero.calcularTotal().total)}")
     println("Pedido N°${segundo.id}: ${segundo.productos.size} productos, total ${formatearPesos(segundo.calcularTotal().total)}")
-    println("Pedido combinado (N°${primero.id} + N°${segundo.id}):")
+    println("Pedido combinado (N°${primero.id} + N°${segundo.id}): ${combinado.productos.size} productos, total ${formatearPesos(combinado.calcularTotal().total)}")
     pausa(1000)
     println(generarResumenPedido(primero))
     pausa(1000)
