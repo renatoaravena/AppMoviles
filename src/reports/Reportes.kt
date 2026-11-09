@@ -1,21 +1,34 @@
+package reports
+
 import model.*
 import model.Pedido.EstadoPedido
 import utils.*
+import kotlin.collections.iterator
 
-//Resumen de un pedido
-fun generarResumenPedido(pedido: Pedido): String {
+
+// Un descuento se muestra con signo menos (o $0 si no hubo descuento)
+private fun textoDescuento(monto: Double): String =
+    if (monto > 0) "-" + formatearPesos(monto) else formatearPesos(0.0)
+
+// Resumen de un pedido. La etiqueta permite mostrar identificadores compuestos
+// cuando se combinan pedidos, sin cambiar el id numérico del objeto.
+fun generarResumenPedido(pedido: Pedido, identificador: String = pedido.id.toString()): String {
     val totales = pedido.calcularTotal()
     val cliente = pedido.cliente
     val porcentajeDescuento = (TASA_DESCUENTO * 100).toInt()
+    val porcentajePromocion = (TASA_PROMOCION * 100).toInt()
     val porcentajeIva = (TASA_IVA * 100).toInt()
 
     // Una línea de totales con la etiqueta a la izquierda y el valor alineado a la derecha
-    fun lineaTotal(etiqueta: String, valor: String) = "${etiqueta.padEnd(24)}${valor.padStart(14)}"
+    fun lineaTotal(etiqueta: String, valor: String) = "${etiqueta.padEnd(30)}${valor.padStart(18)}"
+
+    // El rango de fechas se usa con "in": true si la fecha del pedido está dentro del periodo
+    val textoPeriodo = if (pedido.fecha in PERIODO_PROMOCION) "en periodo de promoción" else "fuera de promoción"
 
     return buildString {
-        appendLine("========================================")
-        appendLine("       RESUMEN DEL PEDIDO N° ${pedido.id}")
-        appendLine("========================================")
+        appendLine("\n================================================")
+        appendLine("          RESUMEN DEL PEDIDO N° $identificador")
+        appendLine("================================================")
 
         appendLine("--- Cliente ---")
         appendLine("Nombre:     ${cliente.nombre}")
@@ -24,54 +37,54 @@ fun generarResumenPedido(pedido: Pedido): String {
         appendLine("Correo:     ${cliente.correo}")
 
         appendLine("--- Productos ---")
-        appendLine("${"Producto".padEnd(14)}${"Precio".padStart(10)}${"Cant.".padStart(7)}${"Subtotal".padStart(14)}")
-        for ((pizza, cantidad) in pedido.productosAgrupados()) {
-            val subtotalLinea = pizza.precio * cantidad
+        appendLine("${"Producto".padEnd(18)}${"Precio".padStart(10)}${"Cant.".padStart(7)}${"Subtotal".padStart(13)}")
+        for ((producto, cantidad) in pedido.productosAgrupados()) {
+            val subtotalLinea = producto.precio * cantidad
             appendLine(
-                "${pizza.nombre.padEnd(14)}${formatearPesos(pizza.precio).padStart(10)}" +
-                        "${cantidad.toString().padStart(7)}${formatearPesos(subtotalLinea).padStart(14)}"
+                "${producto.nombre.padEnd(18)}${formatearPesos(producto.precio).padStart(10)}" +
+                        "${cantidad.toString().padStart(7)}${formatearPesos(subtotalLinea).padStart(13)}"
             )
         }
 
         appendLine("--- Totales ---")
         appendLine(lineaTotal("Subtotal:", formatearPesos(totales.subtotal)))
-        if (totales.descuento > 0) {
-            appendLine(lineaTotal("Descuento ($porcentajeDescuento%):", "-" + formatearPesos(totales.descuento)))
-        } else {
-            appendLine(lineaTotal("Descuento:", formatearPesos(0.0)))
-        }
+        appendLine(lineaTotal("Desc. por cantidad ($porcentajeDescuento%):", textoDescuento(totales.descuentoCantidad)))
+        appendLine(lineaTotal("Desc. promoción ($porcentajePromocion%):", textoDescuento(totales.descuentoPromocion)))
+        appendLine(lineaTotal("Descuento total:", textoDescuento(totales.descuento)))
         appendLine(lineaTotal("IVA ($porcentajeIva%):", formatearPesos(totales.impuestos)))
         appendLine(lineaTotal("TOTAL:", formatearPesos(totales.total)))
 
         appendLine("--- Estado ---")
+        appendLine("Fecha:      ${pedido.fecha} ($textoPeriodo)")
         appendLine("Estado:     ${pedido.estado.descripcion}")
         // ?. y ?: -> si no hay repartidor asignado se muestra un texto por defecto
         val textoSinRepartidor = if (cliente.esRetiroEnLocal) "No aplica (retiro en local)" else "Sin asignar"
         appendLine("Repartidor: ${pedido.repartidor?.nombre ?: textoSinRepartidor}")
         appendLine("Notas:      ${pedido.notas ?: "Sin notas"}")
-        append("========================================")
+        append("================================================\n")
     }
 }
 
-//Reporte de todos los pedidos
+//Reporte de todos los pedidos del dia
 fun imprimirReporteDelDia(pedidos: Array<Pedido>) {
-    println("\n=================== REPORTE DEL DÍA ===================")
-    println("${"N°".padEnd(6)}${"Cliente".padEnd(18)}${"Pizzas".padEnd(8)}${"Total".padEnd(12)}Estado")
-    println("-".repeat(55))
+    println("\n=========================== REPORTE DEL DÍA ===========================")
+    println("${"N°".padEnd(6)}${"Cliente".padEnd(18)}${"Pizzas".padEnd(8)}${"Fecha".padEnd(12)}${"Total".padEnd(12)}Estado")
+    println("-".repeat(68))
 
     for (pedido in pedidos) {
         val total = formatearPesos(pedido.calcularTotal().total)
         println(
             "${pedido.id.toString().padEnd(6)}${pedido.cliente.nombre.padEnd(18)}" +
-                    "${pedido.cantidadPizzas.toString().padEnd(8)}${total.padEnd(12)}${pedido.estado.descripcion}"
+                    "${pedido.cantidadPizzas.toString().padEnd(8)}${pedido.fecha.toString().padEnd(12)}" +
+                    "${total.padEnd(12)}${pedido.estado.descripcion}"
         )
     }
 
-    // Agrupación con filter: completados (ya salieron de cocina) y pendientes (aún en preparación)
+    // Agrupación con filter, completados (ya salieron de cocina) y pendientes (aún en preparación)
     val completados = pedidos.filter { it.estado == EstadoPedido.LISTO || it.estado == EstadoPedido.EN_CAMINO }
     val pendientes = pedidos.filter { it.estado == EstadoPedido.EN_PREPARACION }
 
-    println("-".repeat(55))
+    println("-".repeat(68))
     println("Pedidos completados (Listo / En camino): ${completados.size}")
     completados.forEach { println("   - N°${it.id} ${it.cliente.nombre}: ${it.estado.descripcion}") }
     println("Pedidos pendientes (En preparación): ${pendientes.size}")
